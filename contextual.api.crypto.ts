@@ -69,7 +69,9 @@ export class ContextualCryptoApi extends SodiumBip32Ed25519 {
     }
 
     /**
-     *  
+     * Ref: https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.6
+     * 
+     *  Edwards-Curve Digital Signature Algorithm (EdDSA)
      * */ 
     async signData(context: KeyContext, account: number, keyIndex: number, message: Uint8Array): Promise<Uint8Array> {
         await ready
