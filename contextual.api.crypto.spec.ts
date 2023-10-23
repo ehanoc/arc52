@@ -58,22 +58,16 @@ describe("Contextual Derivation & Signing", () => {
                 describe("Soft Derivations", () => {
                     it("\(OK) Derive m'/44'/0'/0'/0/0 Identity Key", async () => {
                         const key: Uint8Array = await cryptoService.keyGen(KeyContext.Identity, 0, 0)
-                        console.log(`hex: ${Buffer.from(key).toString("hex")}`)
-
                         expect(key).toEqual(new Uint8Array(Buffer.from("66a6adcf9d6723211d820645e863ebabb0d182908865a924f5c6bb6a9a96f0fd", "hex")))
                     })
             
                     it("\(OK) Derive m'/44'/0'/0'/0/1 Identity Key", async () => {
                         const key: Uint8Array = await cryptoService.keyGen(KeyContext.Identity, 0, 1)
-                        console.log(`hex: ${Buffer.from(key).toString("hex")}`)
-
                         expect(key).toEqual(new Uint8Array(Buffer.from("d1a696d7a897c6353c721c5631adfcd451d347314a291cbbd7f4ddace6b6400e", "hex")))
                     })
             
                     it("\(OK) Derive m'/44'/0'/0'/0/2 Identity Key", async () => {
                         const key: Uint8Array = await cryptoService.keyGen(KeyContext.Identity, 0, 2)
-                        console.log(`hex: ${Buffer.from(key).toString("hex")}`)
-
                         expect(key).toEqual(new Uint8Array(Buffer.from("85af3a9acda6c7f55e4e0b8ba961076370be1e9b2971e41164fd7d89095836f8", "hex")))
                     })
                 })
@@ -81,15 +75,11 @@ describe("Contextual Derivation & Signing", () => {
                 describe("Hard Derivations", () => {
                     it("\(OK) Derive m'/44'/0'/1'/0/0 Identity Key", async () => {
                         const key: Uint8Array = await cryptoService.keyGen(KeyContext.Identity, 1, 0)
-                        console.log(`hex: ${Buffer.from(key).toString("hex")}`)
-
                         expect(key).toEqual(new Uint8Array(Buffer.from("62d3d4d9377b03eceb0d6623e9c6df4c162395f4173f94181573052fff25573c", "hex")))
                     })
         
                     it("\(OK) Derive m'/44'/0'/2'/0/1 Identity Key", async () => {
                         const key: Uint8Array = await cryptoService.keyGen(KeyContext.Identity, 2, 1)
-                        console.log(`hex: ${Buffer.from(key).toString("hex")}`)
-
                         expect(key).toEqual(new Uint8Array(Buffer.from("0ff559fc87f9fb27efe6d7d817bd350e815f41a71fa19ed63807aba7ad184e72", "hex")))
                     })
                 })
@@ -98,7 +88,7 @@ describe("Contextual Derivation & Signing", () => {
         it("\(OK) Sign Arbitrary Message", async () => {
             const firstKey: Uint8Array = await cryptoService.keyGen(KeyContext.Address, 0, 0)
 
-            const message: Uint8Array = Buffer.from("Hello World")
+            const message: Uint8Array = new Uint8Array(Buffer.from("Hello World"))
             const signature: Uint8Array = await cryptoService.signData(KeyContext.Address,0, 0, message)
             expect(signature).toHaveLength(64)
 

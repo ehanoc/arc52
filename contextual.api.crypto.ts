@@ -1,31 +1,14 @@
 import { Bip32PrivateKey, Bip32PublicKey, Ed25519PrivateKey, SodiumBip32Ed25519 } from '@cardano-sdk/crypto'
-import { HexBlob } from '@cardano-sdk/util';
-import { createHmac } from 'crypto';
 import {
     crypto_core_ed25519_scalar_add,
     crypto_core_ed25519_scalar_mul,
     crypto_core_ed25519_scalar_reduce,
     crypto_hash_sha512,
-    crypto_scalarmult_ed25519_base,
     crypto_scalarmult_ed25519_base_noclamp,
-    crypto_sign_detached,
     crypto_sign_verify_detached,
-    crypto_sign_seed_keypair,
     ready,
-    crypto_scalarmult_ed25519,
-    crypto_sign_SECRETKEYBYTES,
     crypto_sign_ed25519_pk_to_curve25519,
-    crypto_sign_ed25519_sk_to_curve25519,
-    crypto_sign_PUBLICKEYBYTES,
-    crypto_scalarmult,
-    crypto_sign_ed25519_SECRETKEYBYTES,
-    crypto_kx_client_session_keys,
-    CryptoKX,
-    crypto_kx_server_session_keys,
-    crypto_scalarmult_base,
-    crypto_core_ed25519_is_valid_point,
-    crypto_core_ristretto255_is_valid_point,
-    crypto_sign
+    crypto_scalarmult
   } from 'libsodium-wrappers-sumo';
 
 /**
@@ -95,9 +78,38 @@ export class ContextualCryptoApi extends SodiumBip32Ed25519 {
         const childKey: Bip32PrivateKey = await rootKey.derive(bip44Path)
 
         const raw: Ed25519PrivateKey = childKey.toRawKey()
-        const sig = await raw.sign(HexBlob.fromBytes(message))
+
+        const scalar = raw.bytes().slice(0, 32);
+        const c = raw.bytes().slice(32, 64);
+
+        // \(1): pubKey = scalar * G (base point, no clamp)
+        const publicKey = crypto_scalarmult_ed25519_base_noclamp(scalar);
+
+        // \(2): h = hash(c + msg) mod q
+        const hash: bigint = Buffer.from(crypto_hash_sha512(Buffer.concat([c, message]))).readBigInt64LE()
         
-        return sig.bytes()
+        // \(3):  r = hash(hash(privKey) + msg) mod q 
+        const q: bigint = BigInt(2n ** 252n + 27742317777372353535851937790883648493n);
+        const rBigInt = hash % q
+        const rBString = rBigInt.toString(16) // convert to hex string
+
+        // fill 32 bytes of r
+        // convert to Uint8Array
+        const r = new Uint8Array(32) 
+        for (let i = 0; i < rBString.length; i += 2) {
+            r[i / 2] = parseInt(rBString.substring(i, i + 2), 16);
+        }
+
+        // \(4):  R = r * G (base point, no clamp)
+        const R = crypto_scalarmult_ed25519_base_noclamp(r)
+
+        let h = crypto_hash_sha512(Buffer.concat([R, publicKey, message]));
+        h = crypto_core_ed25519_scalar_reduce(h);
+
+        // \(5): S = (r + h * k) mod q
+        const S = crypto_core_ed25519_scalar_add(r, crypto_core_ed25519_scalar_mul(h, scalar))
+
+        return Buffer.concat([R, S]);
     }
 
     /**
