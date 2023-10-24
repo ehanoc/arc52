@@ -6,7 +6,7 @@ This implementation is not meant to be used in production. It is a reference imp
 
 ```shell
 $ yarn
-$ yarn tests
+$ yarn test
 ```
 
 ## Output
