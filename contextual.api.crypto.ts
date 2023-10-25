@@ -107,9 +107,9 @@ export class ContextualCryptoApi {
             const xpvt = createHash('sha512').update(derivedKl).digest()
 
             // Keys clamped again
-            xpvt[0] &= 0b11_11_10_00;
-            xpvt[31] &= 0b01_11_11_11;
-            xpvt[31] |= 0b01_00_00_00;
+            xpvt[0] &= 0b11_11_10_00
+            xpvt[31] &= 0b01_11_11_11
+            xpvt[31] |= 0b01_00_00_00 // This bit set is not in the BIP32-Ed25519 derivation sepc
 
         const scalar: Uint8Array = xpvt.subarray(0, 32)
         return isPrivate ? xpvt : crypto_scalarmult_ed25519_base_noclamp(scalar)
