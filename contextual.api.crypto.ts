@@ -107,7 +107,6 @@ export class ContextualCryptoApi {
             const xpvt = createHash('sha512').update(derivedKl).digest()
 
             // Keys clamped again
-            // This is wrong based on the Paper [BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace]
             xpvt[0] &= 0b11_11_10_00;
             xpvt[31] &= 0b01_11_11_11;
             xpvt[31] |= 0b01_00_00_00;
