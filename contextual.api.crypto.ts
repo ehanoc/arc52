@@ -11,6 +11,7 @@ import {
     crypto_scalarmult
 } from 'libsodium-wrappers-sumo';
 
+import Ajv, { JSONSchemaType } from "ajv"
 const bip32ed25519 = require("bip32-ed25519");
 
 
@@ -29,6 +30,17 @@ export enum KeyContext {
 export interface ChannelKeys {
     tx: Uint8Array
     rx: Uint8Array
+}
+
+export enum Encoding {
+    CBOR = "cbor",
+    MSGPACK = "msgpack",
+    BASE64 = "base64"
+}
+
+export interface SignMetadata {
+    encoding: Encoding 
+    schema: Object
 }
 
 export const harden = (num: number): number => 0x80_00_00_00 + num;
@@ -136,7 +148,12 @@ export class ContextualCryptoApi {
      * 
      *  Edwards-Curve Digital Signature Algorithm (EdDSA)
      * */ 
-    async signData(context: KeyContext, account: number, keyIndex: number, message: Uint8Array): Promise<Uint8Array> {
+    async signData(context: KeyContext, account: number, keyIndex: number, data: Uint8Array, metadata: SignMetadata): Promise<Uint8Array> {
+        // validate data
+        if (!this.validateData(data, metadata)) {
+            throw new Error("Invalid data")
+        }
+        
         await ready // libsodium
 
         const rootKey: Uint8Array = await this.rootKey(this.seed)
@@ -150,7 +167,7 @@ export class ContextualCryptoApi {
         const publicKey = crypto_scalarmult_ed25519_base_noclamp(scalar);
 
         // \(2): h = hash(c + msg) mod q
-        const hash: bigint = Buffer.from(crypto_hash_sha512(Buffer.concat([c, message]))).readBigInt64LE()
+        const hash: bigint = Buffer.from(crypto_hash_sha512(Buffer.concat([c, data]))).readBigInt64LE()
         
         // \(3):  r = hash(hash(privKey) + msg) mod q 
         const q: bigint = BigInt(2n ** 252n + 27742317777372353535851937790883648493n);
@@ -167,13 +184,34 @@ export class ContextualCryptoApi {
         // \(4):  R = r * G (base point, no clamp)
         const R = crypto_scalarmult_ed25519_base_noclamp(r)
 
-        let h = crypto_hash_sha512(Buffer.concat([R, publicKey, message]));
+        let h = crypto_hash_sha512(Buffer.concat([R, publicKey, data]));
         h = crypto_core_ed25519_scalar_reduce(h);
 
         // \(5): S = (r + h * k) mod q
         const S = crypto_core_ed25519_scalar_add(r, crypto_core_ed25519_scalar_mul(h, scalar))
 
         return Buffer.concat([R, S]);
+    }
+
+    /**
+     * 
+     * @param message 
+     * @param metadata 
+     */
+    private validateData(message: Uint8Array, metadata: SignMetadata): boolean {
+        let decoded: Buffer
+        switch (metadata.encoding) {
+            case Encoding.BASE64:
+                decoded = Buffer.from(message.toString(), 'base64')
+                break
+            default:
+                throw new Error("Invalid encoding")
+        }
+
+        // validate with schema
+        const ajv = new Ajv()
+		const validate = ajv.compile(metadata.schema)
+        return validate(decoded)
     }
 
     /**

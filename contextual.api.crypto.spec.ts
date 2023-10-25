@@ -1,9 +1,9 @@
-import { CryptoKX, KeyPair, crypto_kx_client_session_keys, crypto_kx_server_session_keys, crypto_scalarmult, crypto_scalarmult_ed25519_base_noclamp, crypto_secretbox_NONCEBYTES, crypto_secretbox_easy, crypto_secretbox_open_easy, crypto_sign_ed25519_pk_to_curve25519, crypto_sign_ed25519_sk_to_curve25519, crypto_sign_keypair, crypto_sign_seed_keypair, ready } from "libsodium-wrappers-sumo"
+import { CryptoKX, KeyPair, crypto_kx_client_session_keys, crypto_kx_server_session_keys, crypto_scalarmult, crypto_scalarmult_ed25519_base_noclamp, crypto_secretbox_NONCEBYTES, crypto_secretbox_easy, crypto_secretbox_open_easy, crypto_sign_ed25519_pk_to_curve25519, crypto_sign_ed25519_sk_to_curve25519, crypto_sign_keypair, crypto_sign_seed_keypair, ready, to_base64 } from "libsodium-wrappers-sumo"
 import * as bip39 from "bip39"
 import { sha512_256 } from "js-sha512"
 import base32 from "hi-base32"
 import { randomBytes } from "crypto"
-import { ContextualCryptoApi, KeyContext } from "./contextual.api.crypto"
+import { ContextualCryptoApi, Encoding, KeyContext, SignMetadata } from "./contextual.api.crypto"
 
 /**
  * @param publicKey 
@@ -153,16 +153,49 @@ describe("Contextual Derivation & Signing", () => {
                 })
             })
 
-        describe("Signing", () => {
-            it("\(OK) Sign Arbitrary Message", async () => {
+        describe("Signing Typed Data", () => {
+            it("\(OK) Sign Arbitrary Message against Schem", async () => {
                 const firstKey: Uint8Array = await cryptoService.keyGen(KeyContext.Address, 0, 0)
     
-                const message: Uint8Array = new Uint8Array(Buffer.from("Hello World"))
-                const signature: Uint8Array = await cryptoService.signData(KeyContext.Address,0, 0, message)
+                const message = {
+                    letter: "Hello World"
+                }
+
+                const encoded: Buffer = Buffer.from(to_base64(JSON.stringify(message)))
+
+                // Schema of what we are signing
+                const jsonSchema = {
+                    type: "object",
+                    properties: {
+                        letter: {
+                            type: "string"
+                        }
+                    }
+                }
+
+                const metadata: SignMetadata = { encoding: Encoding.BASE64, schema: jsonSchema } 
+
+                const signature: Uint8Array = await cryptoService.signData(KeyContext.Address,0, 0, encoded,  metadata)
                 expect(signature).toHaveLength(64)
     
-                const isValid: boolean = await cryptoService.verifyWithPublicKey(signature, message, firstKey)
+                const isValid: boolean = await cryptoService.verifyWithPublicKey(signature, encoded, firstKey)
                 expect(isValid).toBe(true)
+            })
+
+            it("\(FAIL) Signing attempt fails because of invalid data against Schema", async () => {    
+                const message = {
+                    letter: "Hello World"
+                }
+
+                const encoded: Buffer = Buffer.from(to_base64(JSON.stringify(message)))
+
+                // Schema of what we are signing
+                const jsonSchema = {
+                    type: "string"
+                }
+
+                const metadata: SignMetadata = { encoding: Encoding.BASE64, schema: jsonSchema } 
+                expect(cryptoService.signData(KeyContext.Identity,0, 0, encoded,  metadata)).rejects.toThrowError()
             })
         })
 
