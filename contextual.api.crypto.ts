@@ -78,10 +78,12 @@ export class ContextualCryptoApi {
         }
 
         // clamping
-        // This bit is "compliant" with [BIP32-Ed25519 HierarchicalDeterministicKeysoveraNon-linear Keyspace]
-        kL[0] &= 0b11_11_10_00;
-        kL[31] &= 0b01_11_11_11;
-        kL[31] |= 0b01_00_00_00;
+        // This bit is "compliant" with [BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace]
+        //Set the bits in kL as follows:
+        // little Endianess 
+        kL[0] &= 0b11_11_10_00; // the lowest 3 bits of the first byte of kL are cleared
+        kL[31] &= 0b01_11_11_11; // the highest bit of the last byte is cleared
+        kL[31] |= 0b01_00_00_00; // the second highest bit of the last byte is set
 
         return new Uint8Array(Buffer.concat([kL, kR, c]))
     }
@@ -103,10 +105,12 @@ export class ContextualCryptoApi {
 
             const derivedKl = derived.subarray(0, 32)
             const xpvt = createHash('sha512').update(derivedKl).digest()
+
+            // Keys clamped again
+            // This is wrong based on the Paper [BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace]
             xpvt[0] &= 0b11_11_10_00;
             xpvt[31] &= 0b01_11_11_11;
             xpvt[31] |= 0b01_00_00_00;
-
 
         const scalar: Uint8Array = xpvt.subarray(0, 32)
         return isPrivate ? xpvt : crypto_scalarmult_ed25519_base_noclamp(scalar)
@@ -143,11 +147,21 @@ export class ContextualCryptoApi {
         const scalar = raw.slice(0, 32);
         const c = raw.slice(32, 64);
 
+        // Change to Signing as part of BIP32-Ed25519 [Hierarchical Deterministic Keys over a Non-linear Keyspace]
+        // READ SECTION VII; on insecurities
+        // #### SECTION THAT IS DIFFERENT #####
+
+        // SHA512(0x02 || scalar || c )
+        const sHash = crypto_hash_sha512(Buffer.concat([new Uint8Array([0x02]), scalar, c]));
+        // truncate sHash to the first 32 bytes
+        const z = sHash.slice(0, 32);
+        // #### END SECTION THAT IS DIFFERENT #####
+
         // \(1): pubKey = scalar * G (base point, no clamp)
         const publicKey = crypto_scalarmult_ed25519_base_noclamp(scalar);
 
         // \(2): h = hash(c + msg) mod q
-        const hash: bigint = Buffer.from(crypto_hash_sha512(Buffer.concat([c, message]))).readBigInt64LE()
+        const hash: bigint = Buffer.from(crypto_hash_sha512(Buffer.concat([z, message]))).readBigInt64LE()
         
         // \(3):  r = hash(hash(privKey) + msg) mod q 
         const q: bigint = BigInt(2n ** 252n + 27742317777372353535851937790883648493n);
