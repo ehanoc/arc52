@@ -1,5 +1,5 @@
 Arguments: 
-  /home/user/.nvm/versions/node/v20.0.0/bin/node /home/user/.nvm/versions/node/v20.0.0/bin/yarn test
+  /home/user/.nvm/versions/node/v20.0.0/bin/node /home/user/.nvm/versions/node/v20.0.0/bin/yarn add bip-ed25519
 
 PATH: 
   /home/user/.nvm/versions/node/v20.0.0/bin:/home/user/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games:/snap/bin:/home/user/.local/bin:/usr/local/go/bin
@@ -14,12 +14,17 @@ Platform:
   linux x64
 
 Trace: 
-  SyntaxError: /home/user/workspace/arc52/package.json: Expected double-quoted property name in JSON at position 1260
-      at JSON.parse (<anonymous>)
-      at /home/user/.nvm/versions/node/v20.0.0/lib/node_modules/yarn/lib/cli.js:1629:59
-      at Generator.next (<anonymous>)
-      at step (/home/user/.nvm/versions/node/v20.0.0/lib/node_modules/yarn/lib/cli.js:310:30)
-      at /home/user/.nvm/versions/node/v20.0.0/lib/node_modules/yarn/lib/cli.js:321:13
+  Error: https://registry.yarnpkg.com/bip-ed25519: Not found
+      at params.callback [as _callback] (/home/user/.nvm/versions/node/v20.0.0/lib/node_modules/yarn/lib/cli.js:66145:18)
+      at self.callback (/home/user/.nvm/versions/node/v20.0.0/lib/node_modules/yarn/lib/cli.js:140890:22)
+      at Request.emit (node:events:511:28)
+      at Request.<anonymous> (/home/user/.nvm/versions/node/v20.0.0/lib/node_modules/yarn/lib/cli.js:141862:10)
+      at Request.emit (node:events:511:28)
+      at IncomingMessage.<anonymous> (/home/user/.nvm/versions/node/v20.0.0/lib/node_modules/yarn/lib/cli.js:141784:12)
+      at Object.onceWrapper (node:events:625:28)
+      at IncomingMessage.emit (node:events:523:35)
+      at endReadableNT (node:internal/streams/readable:1367:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
 
 npm manifest: 
   {
@@ -48,7 +53,9 @@ npm manifest:
       "archy": "~1.0.0",
       "bip39": "^3.1.0",
       "bn.js": "^5.2.1",
+      "hi-base32": "^0.5.1",
       "jest": "^29.7.0",
+      "js-sha512": "^0.8.0",
       "libsodium-wrappers-sumo": "^0.7.13",
       "lodash": "^4.17.21",
       "pbkdf2": "^3.1.2",
@@ -61,7 +68,7 @@ npm manifest:
         "json",
         "ts"
       ],
-      "rootDir": "src",
+      "rootDir": ".",
       "testRegex": ".spec.ts$",
       "transform": {
         ".+\\.(t|j)s$": "ts-jest"
@@ -74,7 +81,7 @@ npm manifest:
         "/src/migration/"
       ],
       "testEnvironment": "node"
-    },
+    }
   }
 
 yarn manifest: 
@@ -1909,6 +1916,11 @@ Lockfile:
     dependencies:
       function-bind "^1.1.2"
   
+  hi-base32@^0.5.1:
+    version "0.5.1"
+    resolved "https://registry.yarnpkg.com/hi-base32/-/hi-base32-0.5.1.tgz#1279f2ddae2673219ea5870c2121d2a33132857e"
+    integrity sha512-EmBBpvdYh/4XxsnUybsPag6VikPYnN30td+vQk+GI3qpahVEG9+gTkG0aXVxTjBqQ5T6ijbWIu77O+C5WFWsnA==
+  
   hosted-git-info@^6.0.0, hosted-git-info@^6.1.1:
     version "6.1.1"
     resolved "https://registry.npmjs.org/hosted-git-info/-/hosted-git-info-6.1.1.tgz"
@@ -2506,6 +2518,11 @@ Lockfile:
       "@jest/types" "^29.6.3"
       import-local "^3.0.2"
       jest-cli "^29.7.0"
+  
+  js-sha512@^0.8.0:
+    version "0.8.0"
+    resolved "https://registry.yarnpkg.com/js-sha512/-/js-sha512-0.8.0.tgz#dd22db8d02756faccf19f218e3ed61ec8249f7d4"
+    integrity sha512-PWsmefG6Jkodqt+ePTvBZCSMFgN7Clckjd0O7su3I0+BW2QWUTJNzjktHsztGLhncP2h8mcF9V9Y2Ha59pAViQ==
   
   js-tokens@^4.0.0:
     version "4.0.0"

@@ -1,4 +1,4 @@
-import { Bip32PrivateKey, Bip32PublicKey, Ed25519PrivateKey, SodiumBip32Ed25519 } from '@cardano-sdk/crypto'
+import { createHash, createHmac } from 'crypto';
 import {
     crypto_core_ed25519_scalar_add,
     crypto_core_ed25519_scalar_mul,
@@ -9,7 +9,10 @@ import {
     ready,
     crypto_sign_ed25519_pk_to_curve25519,
     crypto_scalarmult
-  } from 'libsodium-wrappers-sumo';
+} from 'libsodium-wrappers-sumo';
+
+const bip32ed25519 = require("bip32-ed25519");
+
 
 /**
  * 
@@ -33,7 +36,7 @@ export const harden = (num: number): number => 0x80_00_00_00 + num;
 function GetBIP44PathFromContext(context: KeyContext, account:number, key_index: number): number[] {
     switch (context) {
         case KeyContext.Address:
-            return [harden(44), harden(283), harden(account), 0, key_index]
+            return [0x8000002c, harden(283), harden(account), 0, key_index]
         case KeyContext.Identity:
             return [harden(44), harden(0), harden(account), 0, key_index]
         default:
@@ -41,13 +44,73 @@ function GetBIP44PathFromContext(context: KeyContext, account:number, key_index:
     }
 }
 
-export class ContextualCryptoApi extends SodiumBip32Ed25519 {
+export class ContextualCryptoApi {
 
     // Only for testing, seed shouldn't be persisted 
-    constructor(private readonly entropy: Buffer) {
-        super()
+    constructor(private readonly seed: Buffer) {
+
     }
 
+    /**
+     * 
+     * @param context 
+     * @returns 
+     */
+    private async rootKey(seed: Buffer): Promise<Uint8Array> {
+        // SLIP-0010
+        // We should have been using [BIP32-Ed25519 HierarchicalDeterministicKeysoveraNon-linear Keyspace] instead
+        // Should have been SHA512(seed)
+        const c: Buffer = createHmac('sha256', "ed25519 seed").update(Buffer.concat([new Uint8Array([0x1]), seed])).digest()
+        let I: Buffer = createHmac('sha512', "ed25519 seed").update(seed).digest()
+
+        // split into KL and KR.
+        // (KL, KR) is the extended private key
+        let kL = I.subarray(0, 32) 
+        let kR = I.subarray(32, 64)
+
+        // SLIP-0010 specific
+        // SHOULDN"T BE DONE FOR Ed25519 !
+        // but our ledger implementation does it
+        while ((kL[31] & 0b00100000) != 0) {
+            I = createHmac('sha512', "ed25519 seed").update(I).digest()
+            kL = I.subarray(0, 32)
+            kR = I.subarray(32, 64)
+        }
+
+        // clamping
+        // This bit is "compliant" with [BIP32-Ed25519 HierarchicalDeterministicKeysoveraNon-linear Keyspace]
+        kL[0] &= 0b11_11_10_00;
+        kL[31] &= 0b01_11_11_11;
+        kL[31] |= 0b01_00_00_00;
+
+        return new Uint8Array(Buffer.concat([kL, kR, c]))
+    }
+
+    /**
+     * 
+     * @param rootKey 
+     * @param account 
+     * @param keyIndex 
+     * @param isPrivate 
+     * @returns 
+     */
+    private async deriveKey(rootKey: Uint8Array, bip44Path: number[], isPrivate: boolean = true): Promise<Uint8Array> {
+        let derived = bip32ed25519.derivePrivate(Buffer.from(rootKey), bip44Path[0])
+            derived = bip32ed25519.derivePrivate(derived, bip44Path[1])
+            derived = bip32ed25519.derivePrivate(derived, bip44Path[2])
+            derived = bip32ed25519.derivePrivate(derived, bip44Path[3])
+            derived = bip32ed25519.derivePrivate(derived, bip44Path[4])
+
+            const derivedKl = derived.subarray(0, 32)
+            const xpvt = createHash('sha512').update(derivedKl).digest()
+            xpvt[0] &= 0b11_11_10_00;
+            xpvt[31] &= 0b01_11_11_11;
+            xpvt[31] |= 0b01_00_00_00;
+
+
+        const scalar: Uint8Array = xpvt.subarray(0, 32)
+        return isPrivate ? xpvt : crypto_scalarmult_ed25519_base_noclamp(scalar)
+    }
 
     /**
      * 
@@ -57,15 +120,12 @@ export class ContextualCryptoApi extends SodiumBip32Ed25519 {
      * @returns - public key 32 bytes
      */
     async keyGen(context: KeyContext, account:number, keyIndex: number): Promise<Uint8Array> {
-        await ready
+        await ready // libsodium
 
-        const rootKey: Bip32PrivateKey = await Bip32PrivateKey.fromBip39Entropy(this.entropy, '')
+        const rootKey: Uint8Array = await this.rootKey(this.seed)
         const bip44Path: number[] = GetBIP44PathFromContext(context, account, keyIndex)
-        const childKey: Bip32PrivateKey = await rootKey.derive(bip44Path)
-        const pub: Bip32PublicKey = await childKey.toPublic()
 
-        // return 32 bytes
-        return new Uint8Array(pub.bytes().slice(0, 32))
+        return await this.deriveKey(rootKey, bip44Path, false)
     }
 
     /**
@@ -74,15 +134,14 @@ export class ContextualCryptoApi extends SodiumBip32Ed25519 {
      *  Edwards-Curve Digital Signature Algorithm (EdDSA)
      * */ 
     async signData(context: KeyContext, account: number, keyIndex: number, message: Uint8Array): Promise<Uint8Array> {
-        await ready
-        const rootKey: Bip32PrivateKey = await Bip32PrivateKey.fromBip39Entropy(this.entropy, '')
+        await ready // libsodium
+
+        const rootKey: Uint8Array = await this.rootKey(this.seed)
         const bip44Path: number[] = GetBIP44PathFromContext(context, account, keyIndex)
-        const childKey: Bip32PrivateKey = await rootKey.derive(bip44Path)
+        const raw: Uint8Array = await this.deriveKey(rootKey, bip44Path, true)
 
-        const raw: Ed25519PrivateKey = childKey.toRawKey()
-
-        const scalar = raw.bytes().slice(0, 32);
-        const c = raw.bytes().slice(32, 64);
+        const scalar = raw.slice(0, 32);
+        const c = raw.slice(32, 64);
 
         // \(1): pubKey = scalar * G (base point, no clamp)
         const publicKey = crypto_scalarmult_ed25519_base_noclamp(scalar);
@@ -134,12 +193,12 @@ export class ContextualCryptoApi extends SodiumBip32Ed25519 {
     async ECDH(context: KeyContext, account: number, keyIndex: number, otherPartyPub: Uint8Array): Promise<Uint8Array> {
         await ready
 
-        const rootKey: Bip32PrivateKey = await Bip32PrivateKey.fromBip39Entropy(this.entropy, '')
+        const rootKey: Uint8Array = await this.rootKey(this.seed)
+        
         const bip44Path: number[] = GetBIP44PathFromContext(context, account, keyIndex)
-        const childKey: Bip32PrivateKey = await rootKey.derive(bip44Path)
+        const childKey: Uint8Array = await this.deriveKey(rootKey, bip44Path, true)
 
-        const pvtKey: Uint8Array = childKey.toRawKey().bytes()
-        const scalar: Uint8Array = pvtKey.slice(0, 32)
+        const scalar: Uint8Array = childKey.slice(0, 32)
 
         return crypto_scalarmult(scalar, crypto_sign_ed25519_pk_to_curve25519(otherPartyPub))
     }

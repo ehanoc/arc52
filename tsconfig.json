@@ -4,6 +4,7 @@
     "strictPropertyInitialization": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "allowJs": true,
     "ignoreDeprecations": "5.0",
     "isolatedModules": true,
     "resolveJsonModule": true,
