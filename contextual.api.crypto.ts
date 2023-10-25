@@ -71,7 +71,7 @@ export class ContextualCryptoApi {
         // SLIP-0010 specific
         // SHOULDN"T BE DONE FOR Ed25519 !
         // but our ledger implementation does it
-        while ((kL[31] & 0b00100000) != 0) {
+        while ((kL[31] & 0b00_10_00_00) != 0) {
             I = createHmac('sha512', "ed25519 seed").update(I).digest()
             kL = I.subarray(0, 32)
             kR = I.subarray(32, 64)
@@ -147,21 +147,11 @@ export class ContextualCryptoApi {
         const scalar = raw.slice(0, 32);
         const c = raw.slice(32, 64);
 
-        // Change to Signing as part of BIP32-Ed25519 [Hierarchical Deterministic Keys over a Non-linear Keyspace]
-        // READ SECTION VII; on insecurities
-        // #### SECTION THAT IS DIFFERENT #####
-
-        // SHA512(0x02 || scalar || c )
-        const sHash = crypto_hash_sha512(Buffer.concat([new Uint8Array([0x02]), scalar, c]));
-        // truncate sHash to the first 32 bytes
-        const z = sHash.slice(0, 32);
-        // #### END SECTION THAT IS DIFFERENT #####
-
         // \(1): pubKey = scalar * G (base point, no clamp)
         const publicKey = crypto_scalarmult_ed25519_base_noclamp(scalar);
 
         // \(2): h = hash(c + msg) mod q
-        const hash: bigint = Buffer.from(crypto_hash_sha512(Buffer.concat([z, message]))).readBigInt64LE()
+        const hash: bigint = Buffer.from(crypto_hash_sha512(Buffer.concat([c, message]))).readBigInt64LE()
         
         // \(3):  r = hash(hash(privKey) + msg) mod q 
         const q: bigint = BigInt(2n ** 252n + 27742317777372353535851937790883648493n);
