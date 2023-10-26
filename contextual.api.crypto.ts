@@ -48,7 +48,7 @@ export const harden = (num: number): number => 0x80_00_00_00 + num;
 function GetBIP44PathFromContext(context: KeyContext, account:number, key_index: number): number[] {
     switch (context) {
         case KeyContext.Address:
-            return [0x8000002c, harden(283), harden(account), 0, key_index]
+            return [harden(44), harden(283), harden(account), 0, key_index]
         case KeyContext.Identity:
             return [harden(44), harden(0), harden(account), 0, key_index]
         default:
@@ -65,13 +65,15 @@ export class ContextualCryptoApi {
 
     /**
      * 
-     * @param context 
-     * @returns 
+     * Reference of BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace (https://acrobat.adobe.com/id/urn:aaid:sc:EU:04fe29b0-ea1a-478b-a886-9bb558a5242a)
+     * 
+     * @param seed - 256 bite seed generated from BIP39 Mnemonic 
+     * @returns - Extended root key (kL, kR, c) where kL is the left 32 bytes of the root key, kR is the right 32 bytes of the root key, and c is the chain code. Total 96 bytes
      */
     private async rootKey(seed: Buffer): Promise<Uint8Array> {
         // SLIP-0010
-        // We should have been using [BIP32-Ed25519 HierarchicalDeterministicKeysoveraNon-linear Keyspace] instead
-        // Should have been SHA512(seed)
+        // We should have been using [BIP32-Ed25519 HierarchicalDeterministicKeysoveraNon-linear Keyspace] instead. Which would mean SHA512(seed)
+        // As in the [Section V].A Root keys. 
         const c: Buffer = createHmac('sha256', "ed25519 seed").update(Buffer.concat([new Uint8Array([0x1]), seed])).digest()
         let I: Buffer = createHmac('sha512', "ed25519 seed").update(seed).digest()
 
@@ -100,12 +102,13 @@ export class ContextualCryptoApi {
         return new Uint8Array(Buffer.concat([kL, kR, c]))
     }
 
+
     /**
+     * Derives a child key from the root key based on BIP44 path
      * 
-     * @param rootKey 
-     * @param account 
-     * @param keyIndex 
-     * @param isPrivate 
+     * @param rootKey - root key in extended format (kL, kR, c). It should be 96 bytes long
+     * @param bip44Path - BIP44 path (m / purpose' / coin_type' / account' / change / address_index). The ' indicates that the value is hardened
+     * @param isPrivate  - if true, return the private key, otherwise return the public key
      * @returns 
      */
     private async deriveKey(rootKey: Uint8Array, bip44Path: number[], isPrivate: boolean = true): Promise<Uint8Array> {
@@ -130,8 +133,9 @@ export class ContextualCryptoApi {
     /**
      * 
      * 
-     * @param context 
-     * @param keyIndex 
+     * @param context - context of the key (i.e Address, Identity)
+     * @param account - account number. This value will be hardened as part of BIP44
+     * @param keyIndex - key index. This value will be a SOFT derivation as part of BIP44.
      * @returns - public key 32 bytes
      */
     async keyGen(context: KeyContext, account:number, keyIndex: number): Promise<Uint8Array> {
@@ -147,6 +151,14 @@ export class ContextualCryptoApi {
      * Ref: https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.6
      * 
      *  Edwards-Curve Digital Signature Algorithm (EdDSA)
+     * 
+     * @param context - context of the key (i.e Address, Identity)
+     * @param account - account number. This value will be hardened as part of BIP44
+     * @param keyIndex - key index. This value will be a SOFT derivation as part of BIP44.
+     * @param data - data to be signed in raw bytes
+     * @param metadata - metadata object that describes how `data` was encoded and what schema to use to validate against
+     * 
+     * @returns - signature holding R and S, totally 64 bytes
      * */ 
     async signData(context: KeyContext, account: number, keyIndex: number, data: Uint8Array, metadata: SignMetadata): Promise<Uint8Array> {
         // validate data
@@ -193,10 +205,13 @@ export class ContextualCryptoApi {
         return Buffer.concat([R, S]);
     }
 
+
     /**
+     * SAMPLE IMPLEMENTATION to show how to validate data with encoding and schema, using base64 as an example 
      * 
      * @param message 
      * @param metadata 
+     * @returns 
      */
     private validateData(message: Uint8Array, metadata: SignMetadata): boolean {
         let decoded: Buffer
@@ -214,22 +229,35 @@ export class ContextualCryptoApi {
         return validate(decoded)
     }
 
+
     /**
+     * Wrapper around libsodium basica signature verification
      * 
-     * @param publicKey 
-     * @param message 
-     * @param signature 
-     * @returns 
+     * Any lib or system that can verify EdDSA signatures can be used
+     * 
+     * @param signature - raw 64 bytes signature (R, S)
+     * @param message - raw bytes of the message
+     * @param publicKey - raw 32 bytes public key (x,y)
+     * @returns true if signature is valid, false otherwise
      */
     async verifyWithPublicKey(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Promise<boolean> {
         return crypto_sign_verify_detached(signature, message, publicKey)
     }
 
+
     /**
+     * Function to perform ECDH against a provided public key
      * 
-     * @param context 
-     * @param keyIndex 
-     * @param otherPartyPub 
+     * ECDH reference link: https://en.wikipedia.org/wiki/Elliptic-curve_Diffie%E2%80%93Hellman
+     * 
+     * It creates a shared secret between two parties. Each party only needs to be aware of the other's public key.
+     * This symmetric secret can be used to derive a symmetric key for encryption and decryption. Creating a private channel between the two parties.
+     * 
+     * @param context - context of the key (i.e Address, Identity)
+     * @param account - account number. This value will be hardened as part of BIP44
+     * @param keyIndex - key index. This value will be a SOFT derivation as part of BIP44.
+     * @param otherPartyPub - raw 32 bytes public key of the other party
+     * @returns - raw 32 bytes shared secret
      */
     async ECDH(context: KeyContext, account: number, keyIndex: number, otherPartyPub: Uint8Array): Promise<Uint8Array> {
         await ready
