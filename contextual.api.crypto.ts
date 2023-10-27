@@ -82,9 +82,9 @@ export class ContextualCryptoApi {
         let kL = I.subarray(0, 32) 
         let kR = I.subarray(32, 64)
 
-        // SLIP-0010 specific
-        // SHOULDN"T BE DONE FOR Ed25519 !
-        // but our ledger implementation does it
+        // Specific to our Algorand app implementation (Taken from Ledger reference implementation: https://github.com/LedgerHQ/orakolo/blob/0b2d5e669ec61df9a824df9fa1a363060116b490/src/python/orakolo/HDEd25519.py#L130)
+        // Seems to try to find a rootKey in which the last bits are cleared
+        // Shouldn't be necessary has keys are expected to be clamped as in the next step
         while ((kL[31] & 0b00_10_00_00) != 0) {
             I = createHmac('sha512', "ed25519 seed").update(I).digest()
             kL = I.subarray(0, 32)
@@ -122,6 +122,10 @@ export class ContextualCryptoApi {
             const xpvt = createHash('sha512').update(derivedKl).digest()
 
             // Keys clamped again
+            // This is specific to our algorand app implementation
+            // Taken from reference code: https://github.com/Zondax/ledger-algorand/blob/test/tests_zemu/tests/key_derivation.ts#L84
+            // But not part of Ledger's reference implementation:https://github.com/LedgerHQ/orakolo/blob/0b2d5e669ec61df9a824df9fa1a363060116b490/src/python/orakolo/HDEd25519.py#L156
+            // And not part of [BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace] derivation spec
             xpvt[0] &= 0b11_11_10_00
             xpvt[31] &= 0b01_11_11_11
             xpvt[31] |= 0b01_00_00_00 // This bit set is not in the BIP32-Ed25519 derivation sepc
